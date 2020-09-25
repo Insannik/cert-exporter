@@ -17,41 +17,60 @@ type certMetric struct {
 	cn                  string
 }
 
-func secondsToExpiryFromCertAsFile(file string, includeFullCertChain bool) (certMetric, error) {
+func secondsToExpiryFromCertAsFile(file string, includeFullCertChain bool) ([]certMetric, error) {
 	certBytes, err := ioutil.ReadFile(file)
 	if err != nil {
-		return certMetric{}, err
+		return []certMetric{}, err
 	}
 
 	return secondsToExpiryFromCertAsBytes(certBytes, includeFullCertChain)
 }
 
-func secondsToExpiryFromCertAsBase64String(s string, includeFullCertChain bool) (certMetric, error) {
+func secondsToExpiryFromCertAsBase64String(s string, includeFullCertChain bool) ([]certMetric, error) {
 	certBytes, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
-		return certMetric{}, err
+		return []certMetric{}, err
 	}
 
 	return secondsToExpiryFromCertAsBytes(certBytes, includeFullCertChain)
 }
 
-func secondsToExpiryFromCertAsBytes(certBytes []byte, includeFullCertChain bool) (certMetric, error) {
-	var metric certMetric
-	block, _ := pem.Decode(certBytes)
+func secondsToExpiryFromCertAsBytes(certBytes []byte, includeFullCertChain bool) ([]certMetric, error) {
+	var metrics []certMetric
+	var blocks []*pem.Block
+
+	block, rest := pem.Decode(certBytes)
 	if block == nil {
-		return metric, fmt.Errorf("Failed to parse as a pem")
+		return metrics, fmt.Errorf("Failed to parse as a pem")
+	}
+	blocks = append(blocks, block)
+
+	if includeFullCertChain {
+		for len(rest) != 0 {
+			block, rest = pem.Decode(rest)
+			if block == nil {
+				return metrics, fmt.Errorf("Failed to parse intermediate as a pem")
+			}
+			blocks = append(blocks, block)
+		}
 	}
 
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return metric, err
+	for _, block := range blocks {
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return metrics, err
+		}
+
+		var metric certMetric
+		metric.notAfter = float64(cert.NotAfter.Unix())
+		metric.durationUntilExpiry = time.Until(cert.NotAfter).Seconds()
+		metric.issuer = cert.Issuer.CommonName
+		metric.cn = cert.Subject.CommonName
+
+		metrics = append(metrics, metric)
 	}
 
-	metric.notAfter = float64(cert.NotAfter.Unix())
-	metric.durationUntilExpiry = time.Until(cert.NotAfter).Seconds()
-	metric.issuer = cert.Issuer.CommonName
-	metric.cn = cert.Subject.CommonName
-	return metric, nil
+	return metrics, nil
 }
 
 // func secondsToExpiryFromMultipleCertsAsBytes(certBytes []byte) ([]certMetric, error) {
