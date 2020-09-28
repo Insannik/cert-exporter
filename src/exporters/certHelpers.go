@@ -45,13 +45,16 @@ func secondsToExpiryFromCertAsBytes(certBytes []byte, includeFullCertChain bool)
 	}
 	blocks = append(blocks, block)
 
+	// If the include-full-cert-chain flag is used, the rest of the bytes in the file will also be processed
 	if includeFullCertChain {
 		for len(rest) != 0 {
 			block, rest = pem.Decode(rest)
 			if block == nil {
 				return metrics, fmt.Errorf("Failed to parse intermediate as a pem")
 			}
-			blocks = append(blocks, block)
+			if block.Type == "CERTIFICATE" {
+				blocks = append(blocks, block)
+			}
 		}
 	}
 
