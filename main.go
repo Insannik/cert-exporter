@@ -60,6 +60,9 @@ func main() {
 	flag.Parse()
 
 	glog.Infof("Starting cert-exporter (version %s; commit %s; date %s)", version, commit, date)
+	if includeFullCertChain {
+		glog.Infof("Argument '-include-full-cert-chain' set to true. Metrics for all certificates in the chain will be published.")
+	}
 
 	if len(includeCertGlobs) > 0 {
 		certChecker := checkers.NewCertChecker(pollingPeriod, includeCertGlobs, excludeCertGlobs, os.Getenv("NODE_NAME"), includeFullCertChain, &exporters.CertExporter{})
